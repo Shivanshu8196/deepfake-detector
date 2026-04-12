@@ -39,29 +39,25 @@ login_manager.login_view = "login"
 
 # ---------------- DATABASE ---------------- #
 
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
+class User(UserMixin):
+    # ❗ Dummy user (no DB dependency)
+    def __init__(self, id=1, username="test_user"):
+        self.id = id
+        self.username = username
 
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return User()
 
 
-# ---------------- DB INIT FIX (CRITICAL) ---------------- #
-
-def init_db():
-    try:
-        db.create_all()
-    except Exception as e:
-        print("❌ DB INIT ERROR:", str(e))
-
+# ---------------- AUTO LOGIN ---------------- #
 
 @app.before_request
-def before_request():
-    init_db()
+def auto_login():
+    if not current_user.is_authenticated:
+        dummy_user = User()
+        login_user(dummy_user)
 
 
 # ---------------- MODEL SETUP ---------------- #
@@ -141,7 +137,7 @@ def predict_video(video_path):
 
 @app.route('/')
 def home():
-    return render_template('home.html')
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/about')
@@ -149,48 +145,14 @@ def about():
     return render_template('about.html')
 
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/register')
 def register():
-    if request.method == 'POST':
-        try:
-            user = User(
-                username=request.form['username'],
-                password=request.form['password']
-            )
-
-            db.session.add(user)
-            db.session.commit()
-
-            flash("Registered Successfully")
-            return redirect(url_for('login'))
-
-        except Exception as e:
-            print("❌ REGISTER ERROR:", str(e))
-            flash("Registration failed")
-
-    return render_template('register.html')
+    return redirect(url_for('dashboard'))
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login')
 def login():
-    if request.method == 'POST':
-        try:
-            user = User.query.filter_by(
-                username=request.form['username'],
-                password=request.form['password']
-            ).first()
-
-            if user:
-                login_user(user)
-                return redirect(url_for('dashboard'))
-            else:
-                flash("Invalid credentials")
-
-        except Exception as e:
-            print("❌ LOGIN ERROR:", str(e))
-            flash("Login failed")
-
-    return render_template('login.html')
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/dashboard', methods=['GET', 'POST'])
@@ -218,10 +180,8 @@ def dashboard():
 
 
 @app.route('/logout')
-@login_required
 def logout():
-    logout_user()
-    return redirect(url_for('login'))
+    return redirect(url_for('dashboard'))
 
 
 # ---------------- HEALTH CHECK ---------------- #
