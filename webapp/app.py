@@ -27,7 +27,7 @@ MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pth")  # use best.pth
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/users.db'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 db = SQLAlchemy(app)
@@ -195,6 +195,8 @@ if __name__ == '__main__':
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
     with app.app_context():
+        print("Creating DB...")
         db.create_all()
+        print("DB created")
 
     app.run(debug=True)
