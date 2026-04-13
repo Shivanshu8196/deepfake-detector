@@ -17,10 +17,19 @@ from src.utils.face_detect import crop_faces_from_frame
 from src.model import CNNFeatureExtractor, CNN_LSTM_Attention
 
 
+# ---------------- FILE VALIDATION ---------------- #
+
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 # ---------------- APP SETUP ---------------- #
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret123'
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -173,6 +182,11 @@ def dashboard():
 
         if file.filename == '':
             flash("No file selected")
+            return redirect(url_for('dashboard'))
+
+        # 🔥 FILE TYPE VALIDATION
+        if not allowed_file(file.filename):
+            flash("Invalid file type. Only MP4, AVI, MOV allowed.")
             return redirect(url_for('dashboard'))
 
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
