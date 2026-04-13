@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -63,8 +64,9 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 MODEL_PATH = os.path.join(BASE_DIR, "models", "best.pth")
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu'
 
 transform = T.Compose([
     T.Resize((224, 224)),
@@ -86,7 +88,7 @@ model.eval()
 print("✅ Model loaded correctly")
 
 
-# ---------------- PREDICTION ---------------- #
+# ---------------- PREDICTION (OPTIMIZED) ---------------- #
 
 def predict_video(video_path):
 
@@ -95,12 +97,14 @@ def predict_video(video_path):
 
     ok, frame = cap.read()
     idx = 0
+    frame_skip = 3   # 🔥 optimization
 
-    while ok and idx < 16:
-        faces = crop_faces_from_frame(frame)
+    while ok and idx < 24:
+        if idx % frame_skip == 0:
+            faces = crop_faces_from_frame(frame)
 
-        if len(faces) > 0:
-            frames.append(faces[0])
+            if len(faces) > 0:
+                frames.append(faces[0])
 
         ok, frame = cap.read()
         idx += 1
@@ -109,6 +113,9 @@ def predict_video(video_path):
 
     if len(frames) < 2:
         return "NO FACE DETECTED", 0
+
+    # 🔥 limit frames
+    frames = frames[:6]
 
     xs = torch.stack([transform(f) for f in frames]).unsqueeze(0).to(device)
 
@@ -121,6 +128,9 @@ def predict_video(video_path):
 
         logits, _ = model(feats)
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+
+    # 🔥 free memory
+    del xs, feats, logits
 
     label = "FAKE" if probs[1] > probs[0] else "REAL"
     confidence = max(probs) * 100
@@ -140,6 +150,7 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+
         hashed_password = generate_password_hash(password)
 
         db.collection("users").document(username).set({
@@ -178,13 +189,18 @@ def login():
 @login_required
 def dashboard():
     if request.method == 'POST':
+
+        # 🔥 size check
+        if request.content_length > 50 * 1024 * 1024:
+            flash("File too large!")
+            return redirect(url_for('dashboard'))
+
         file = request.files['video']
 
         if file.filename == '':
             flash("No file selected")
             return redirect(url_for('dashboard'))
 
-        # 🔥 FILE TYPE VALIDATION
         if not allowed_file(file.filename):
             flash("Invalid file type. Only MP4, AVI, MOV allowed.")
             return redirect(url_for('dashboard'))
@@ -194,7 +210,14 @@ def dashboard():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(filepath)
 
+        # 🔥 timeout handling
+        start_time = time.time()
+
         label, confidence = predict_video(filepath)
+
+        if time.time() - start_time > 20:
+            flash("Processing too slow. Try shorter video.")
+            return redirect(url_for('dashboard'))
 
         return render_template('result.html',
                                label=label,
